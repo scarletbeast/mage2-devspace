@@ -1,0 +1,336 @@
+---
+version: v1beta10
+vars:
+  - name: PHP_NGINX_IMAGE
+    question: What should the image name be ? (Example, github.com/youruser/repo/magento2phpfpm)
+    default: ghcr.io/scarletbeast/magento2
+  - name: NAMESPACE
+    question: What namespace is the project in? This lets MySQL, Redis, Elasticsearch etc. communicate correctly
+    default: magento2
+  - name: INGRESS_URL
+    question: What is the URL this should listen on? generally you want ${NAMESPACE}.microk8s.local (If local, remember to add to /etc/hosts)
+    default: ${NAMESPACE}.microk8s.local
+  - name: ROOT_PW
+    default: rootpw
+    source: none
+  - name: DB_USER
+    default: magento2
+    source: none
+  - name: DB_PASS
+    default: magento2
+    source: none
+  - name: DB_NAME
+    default: magento2
+    source: none
+  - name: MAILHOG_HOST
+    default: mailhog.${NAMESPACE}.svc.cluster.local
+    source: none
+  - name: REDIS_HOST
+    default: redis-master.${NAMESPACE}.svc.cluster.local
+    source: none
+  - name: REDIS_PORT
+    default: '6379'
+    source: none
+  - name: REDIS_DB
+    default: '0'
+    source: none
+  - name: REDIS_PASSWORD
+    default: 'redis'
+    question: What should the password be for redis?
+  - name: MYSQL_HOST
+    default: mariadb-mariadb-galera.${NAMESPACE}.svc.cluster.local
+    source: none
+
+images:
+  php:
+    image: ${PHP_NGINX_IMAGE}
+    dockerfile: ./.container/Dockerfile.dev
+    context: ./
+    injectRestartHelper: true
+    appendDockerfileInstructions:
+      - USER root
+    rebuildStrategy: ignoreContextChanges
+    build:
+      kaniko:
+        insecure: false
+        cache: true
+
+deployments:
+  - name: web
+    helm:
+      componentChart: true
+      values:
+        replicas: 1
+        service:
+          ports:
+            - port: 8080
+        containers:
+          - image: ${PHP_NGINX_IMAGE}
+            env:
+              - name: CACHE_HOST
+                value: ${REDIS_HOST}
+              - name: CACHE_PASSWORD
+                value: ${REDIS_PASSWORD}
+              - name: CACHE_PORT
+                value: ${REDIS_PORT}
+              - name: CACHE_DB
+                value: ${REDIS_DB}
+              - name: DB_USER
+                value: ${DB_USER}
+              - name: DB_PASSWORD
+                value: ${DB_PASS}
+              - name: DB_HOST
+                value: ${MYSQL_HOST}
+              - name: DB_NAME
+                value: ${DB_NAME}
+              - name: MAIL_HOST
+                value: ${MAILHOG_HOST}
+        ingress:
+          tls: false
+          rules:
+            - host: ${INGRESS_URL}
+
+  - name: redis
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: redis
+      values:
+        replica:
+          replicaCount: 1
+        auth:
+          enabled: true
+          password: ${REDIS_PASSWORD}
+        service:
+          ports:
+            - port: 6379
+        persistence:
+          size: 5Gi
+        master:
+          disableCommands: []
+      wait: true
+
+  - name: mariadb
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: mariadb-galera
+        version: 3.1.3
+      values:
+        image:
+          tag: 10.4.24
+        replicaCount: 1
+        rootUser:
+          user: root
+          password: ${ROOT_PW}
+        db:
+          user: ${DB_USER}
+          password: ${DB_PASS}
+          name: ${DB_NAME}
+        persistence:
+          size: 10Gi
+        service:
+          ports:
+            - port: 3306
+
+  - name: elasticsearch
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: elasticsearch
+      values:
+        global:
+          kibanaEnabled: true
+        plugins: analysis-phonetic # Comma separated list of plugins
+        master:
+          heapSize: 256m
+          replicas: 1
+          persistence:
+            size: 5Gi
+        coordinating:
+          heapSize: 256m
+          replicas: 1
+        ingest:
+          heapSize: 256m
+          enabled: false
+          replicas: 1
+        data:
+          heapSize: 256m
+          enabled: true
+          replicas: 1
+          persistence:
+            size: 5Gi
+
+  - name: rabbitmq
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: rabbitmq
+      values:
+        replicaCount: 1
+        auth:
+          username: root
+          password: ${ROOT_PW}
+        persistence:
+          enabled: true
+          size: 5Gi
+
+  - name: phpmyadmin
+    helm:
+      chart:
+        repo: https://charts.bitnami.com/bitnami
+        name: phpmyadmin
+      values:
+        db:
+          host: ${MYSQL_HOST}
+          allowArbitraryServer: false
+
+  - name: redisadmin
+    helm:
+      componentChart: true
+      values:
+        replicas: 1
+        containers:
+          - image: erikdubbelboer/phpredisadmin
+            env:
+              - name: REDIS_1_HOST
+                value: ${REDIS_HOST}
+              - name: REDIS_1_NAME
+                value: cluster
+              - name: REDIS_1_AUTH
+                value: ${REDIS_PASSWORD}
+        service:
+          ports:
+            - port: 80
+
+  - name: mailhog
+    helm:
+      componentChart: true
+      values:
+        replicas: 1
+        containers:
+          - image: mailhog/mailhog
+        service:
+          ports:
+            - port: 1025
+
+dev:
+  ports:
+    - labelSelector:
+        app.kubernetes.io/component: web
+      forward:
+        - port: 8080
+          remotePort: 8080
+      reverseForward:
+        - port: 9000
+          remotePort: 9000
+        - port: 9003
+          remotePort: 9003
+    - labelSelector:
+        statefulset.kubernetes.io/pod-name: redis-master-0
+      forward:
+        - port: 6379
+          remotePort: 6379
+    - labelSelector:
+        app.kubernetes.io/component: mailhog
+      forward:
+        - port: 1025
+          remotePort: 1025
+        - port: 8025
+          remotePort: 8025
+    - labelSelector:
+        app.kubernetes.io/component: redisadmin
+      forward:
+        - port: 8060
+          remotePort: 80
+    - labelSelector:
+        app.kubernetes.io/name: phpmyadmin
+        app.kubernetes.io/instance: phpmyadmin
+      forward:
+        - port: 8070
+          remotePort: 8080
+    - labelSelector:
+        statefulset.kubernetes.io/pod-name: elasticsearch-master-0
+      forward:
+        - port: 9300
+          remotePort: 9300
+        - port: 9200
+          remotePort: 9200
+    - labelSelector:
+        statefulset.kubernetes.io/pod-name: rabbitmq-0
+      forward:
+        - port: 5672
+          remotePort: 5672
+        - port: 5671
+          remotePort: 5671
+        - port: 25672
+          remotePort: 25672
+        - port: 15672
+          remotePort: 15672
+    - labelSelector:
+        app.kubernetes.io/name: kibana
+        app.kubernetes.io/instance: elasticsearch
+      forward:
+        - port: 5601
+          remotePort: 5601
+
+  open:
+    - url: ${INGRESS_URL}
+  sync:
+    - labelSelector:
+        app.kubernetes.io/component: web
+      waitInitialSync: true
+      initialSync: mirrorRemote
+      excludePaths:
+        - .git/
+        - .devspace/
+        - .idea/
+        - .vscode/
+        - generated/
+        - modules/
+        - var/
+        - pub/static/
+      uploadExcludePaths:
+        - devspace.yaml
+      downloadExcludePaths:
+        - html/
+        - Dockerfile
+      onUpload:
+        restartContainer: false
+  autoReload:
+    paths:
+      - ./.container
+    images:
+      - php
+
+commands:
+  - name: setupeverything
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- /var/www/.container/setupMagento.sh"
+  - name: cli
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- zsh"
+  - name: flush
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento cache:clean && php bin/magento cache:flush"
+  - name: wipe
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- rm -rf generated/* var/view_preprocessed/* pub/static/*"
+  - name: setupupgrade
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento setup:upgrade"
+  - name: setupinstall
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento setup:install"
+  - name: importdbbare
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- magerun2 db:import -c gzip .container/bare.database.sql.gz"
+  - name: importdbsample
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- magerun2 db:import -c gzip .container/sample.database.sql.gz"
+  - name: composerinstall
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- composer install -o"
+  - name: composerupdate
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- composer update -o"
+  - name: unittests
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- ./vendor/bin/phpunit -c dev/tests/unit/phpunit.xml.dist"
+  - name: enableallmodules
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento module:enable --all"
+  - name: disableelasticsearch
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento module:disable Magento_Elasticsearch6 Magento_Elasticsearch7 Magento_Elasticsearch"
+  - name: disablemaintenance
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento maintenance:disable"
+  - name: enableelasticsearch
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- php bin/magento module:enable Magento_Elasticsearch6 Magento_Elasticsearch7 Magento_Elasticsearch"
