@@ -12,7 +12,7 @@ if [ ! -e $CONTAINER_ALREADY_STARTED ]; then
     cd ..
     rm -rf magento
     cp .container/env.php magento/app/etc/
-    cp auth.json.sample ./auth.json
+    cp .container/auth.json ./auth.json
 else
     echo "-- Not first container startup --"
 fi
