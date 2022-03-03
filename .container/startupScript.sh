@@ -14,6 +14,7 @@ if [ ! -e $CONTAINER_ALREADY_STARTED ]; then
     rm -rf magento2
     cp .container/env.php app/etc/
     cp .container/auth.json ./auth.json
+    chmod u+x .container/setupMagento.sh
 else
     echo "-- Not first container startup --"
 fi
