@@ -7,5 +7,6 @@ php bin/magento setup:install
 php bin/magento module:enable Magento_Elasticsearch6 Magento_Elasticsearch7 Magento_Elasticsearch
 php bin/magento setup:upgrade
 php bin/magento index:reindex
-php bin/magento cache:clean && php bin/magento cache:flush
 php bin/magento maintenance:disable
+php bin/magento cache:clean
+php bin/magento cache:flush
