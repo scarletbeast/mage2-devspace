@@ -286,10 +286,10 @@ dev:
         - .devspace/
         - .idea/
         - .vscode/
-        - generated/
-        - modules/
-        - var/
-        - pub/static/
+#        - generated/
+#        - modules/
+#        - var/
+#        - pub/static/
       uploadExcludePaths:
         - devspace.yaml
       downloadExcludePaths:
