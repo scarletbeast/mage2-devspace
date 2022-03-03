@@ -305,7 +305,7 @@ dev:
 
 commands:
   - name: setupeverything
-    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- /var/www/.container/setupMagento.sh"
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- chmod u+x /var/www/.container/setupMagento.sh && /var/www/.container/setupMagento.sh"
   - name: cli
     command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- zsh"
   - name: flush
