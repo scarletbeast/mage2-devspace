@@ -305,7 +305,7 @@ dev:
 
 commands:
   - name: setupeverything
-    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- .container/setupMagento.sh"
+    command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- zsh -c '.container/setupMagento.sh'"
   - name: cli
     command: "devspace -n ${NAMESPACE} enter --label-selector app.kubernetes.io/component=web -- zsh"
   - name: flush
