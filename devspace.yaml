@@ -286,9 +286,9 @@ dev:
         - .devspace/
         - .idea/
         - .vscode/
-#        - generated/
+        - generated/
 #        - modules/
-#        - var/
+        - var/
 #        - pub/static/
       uploadExcludePaths:
         - devspace.yaml
