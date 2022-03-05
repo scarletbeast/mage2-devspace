@@ -17,4 +17,14 @@ if [ ! -e $CONTAINER_ALREADY_STARTED ]; then
     chmod u+x .container/setupMagento.sh
 else
     echo "-- Not first container startup --"
+    cd /var/www
+    git clone https://github.com/magento/magento2.git
+    cd magento2
+    git checkout tags/2.4.3-p1
+    rm -rf .git
+    rm .gitignore
+    rm README.md
+    cp -rf ./* ..
+    cd ..
+    rm -rf magento2
 fi
